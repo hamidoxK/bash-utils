@@ -1,26 +1,35 @@
 #!/bin/bash
 
+# --- HARDCODED DESKTOP PRIVILEGES ---
+export DISPLAY=:0
+export XDG_RUNTIME_DIR=/run/user/1000
+export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus"
+
 # ==========================================
 # Instant Sorter - Automated Downloads Organizer
 # ==========================================
-
-# --- UNIVERSAL DESKTOP PRIVILEGES (For Notifications) ---
-export DISPLAY=:0
-export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
 
 # --- CONFIGURATION ---
 TARGET="$HOME/Downloads"
 LOG="$HOME/.instant-sorter.log"
 
-# Setup base structure safely
+# Setup base structure safely (Removed Torrents/Watch, kept Torrents)
 mkdir -p "$TARGET"/{Images,Videos,Audio,Archives,Others,Software,Torrents,Documents/{PDF,EPUB}}
 touch "$LOG"
 
 organize_file() {
     local src="$1"
 
-    # --- RULE 2, 4 & 6: STRICT SAFETY LOCKS ---
+    # --- RECURSIVE SAFETY GATE ---
+    # Only sort files sitting directly in Downloads.
+    # Ignore anything inside sub-folders (like extracted ZIP contents).
+    local parent_dir
+    parent_dir=$(dirname "$src")
+    if [[ "$parent_dir" != "$TARGET" ]]; then
+        return
+    fi
+
+   # --- RULE 2, 4 & 6: STRICT SAFETY LOCKS ---
     [[ ! -f "$src" ]] && return                       # Ignore directories or deleted files
     [[ "$src" != "$TARGET"* ]] && return              # Rule 4: Out-of-bounds immunity
 
@@ -29,23 +38,23 @@ organize_file() {
     [[ "$filename" =~ ^\. ]] && return                # Ignore hidden files (.cache, etc.)
 
     # --- TORRENT I/O FIX ---
-    # Ignore browser & torrent temporary files mid-download
+    # Ignore browser & torrent temporary files mid-download (!qB and aria2 added)
     [[ "$filename" =~ \.(crdownload|part|download|tmp|opdownload|!qB|aria2)$ ]] && return
 
     local name="${filename%.*}"                       # Filename strictly without extension
     local category_dir=""
 
-    # --- RULE 5: ASSIGN CATEGORY ---
+    # --- RULE 5: ASSIGN CATEGORY (Updated for .iso and .torrent) ---
     case "${filename,,}" in
         *.jpg|*.jpeg|*.png|*.gif|*.webp|*.svg|*.ico) category_dir="$TARGET/Images" ;;
         *.mp4|*.mkv|*.avi|*.mov|*.webm)              category_dir="$TARGET/Videos" ;;
         *.mp3|*.wav|*.flac|*.m4a|*.opus)             category_dir="$TARGET/Audio" ;;
         *.zip|*.rar|*.7z|*.tar|*.gz|*.bz2|*.xz|*.tgz|*.z[0-9]*|*.r[0-9]*) category_dir="$TARGET/Archives" ;;
-        *.iso|*.deb|*.appimage|*.msi|*.exe|*.rpm)    category_dir="$TARGET/Software" ;;
+        *.iso|*.deb|*.appimage|*.msi|*.exe|*.rpm)    category_dir="$TARGET/Software" ;; # .iso is now here!
         *.pdf)                                       category_dir="$TARGET/Documents/PDF" ;;
         *.epub)                                      category_dir="$TARGET/Documents/EPUB" ;;
         *.doc|*.docx|*.txt|*.xls|*.xlsx|*.ppt|*.csv) category_dir="$TARGET/Documents" ;;
-        *.torrent)                                   category_dir="$TARGET/Torrents" ;;
+        *.torrent)                                   category_dir="$TARGET/Torrents" ;; # No more Watch folder!
         *)                                           category_dir="$TARGET/Others" ;;
     esac
 
@@ -87,7 +96,8 @@ organize_file() {
         fi
     fi
 
-    # --- EXECUTE & ANTI-OVERWRITE ---
+    # --- EXECUTE & ANTI-OVERWRITE (THE LOOP KILLER) ---
+    # This specifically stops the notification spam. It ONLY acts if the file is in the wrong place.
     if [[ "$src" != "$final_dest" ]]; then
 
         # Prevent overwriting existing files
@@ -123,6 +133,17 @@ organize_file() {
 
             # FEATURE 1: Desktop Notification
             notify-send -i folder "Instant Sorter" "Moved: $(basename "$src")\nTo: $(basename "$(dirname "$final_dest")")" 2>/dev/null
+
+            # FEATURE 5: Auto-extract ZIP files and trash the original
+            if [[ "$final_dest" == *.zip ]]; then
+                local extract_dir="${final_dest%.*}"
+                mkdir -p "$extract_dir"
+                if unzip -q "$final_dest" -d "$extract_dir" 2>/dev/null; then
+                    rm "$final_dest"
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted & Cleaned: $(basename "$final_dest")" >> "$LOG"
+                    notify-send -i archive-extract "Instant Sorter" "Extracted: $(basename "$final_dest")" 2>/dev/null
+                fi
+            fi
         fi
     fi
 }
@@ -130,6 +151,7 @@ organize_file() {
 # --- RULE 1: STARTUP SWEEP ---
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running Startup Sweep..." >> "$LOG"
 
+# Updated to remove the Torrents/Watch folder
 CHECK_DIRS=(
     "$TARGET"
     "$TARGET/Images"
@@ -153,8 +175,7 @@ for d in "${CHECK_DIRS[@]}"; do
 done
 
 # --- LIVE MONITOR ---
-# Recursive flag (-r) removed to prevent infinite loops
-/usr/bin/inotifywait -m -e close_write,moved_to --format "%w%f" "$TARGET" 2>/dev/null | \
+/usr/bin/inotifywait -m -r -e close_write,moved_to --format "%w%f" "$TARGET" 2>/dev/null | \
 while IFS= read -r detected; do
     sleep 0.5
     organize_file "$detected"
