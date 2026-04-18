@@ -1,81 +1,15 @@
-Instant Sorter
-Automated Downloads Organizer
-Instant Sorter is a lightweight Bash script for Linux.
-It monitors your Downloads folder in real-time.
-It sorts files into folders and groups related files together.
-
-🛠️ Required Tools
-You need to install two small tools for this to work.
-Choose the command for your Linux version:
-
-For Mint, Ubuntu, or Debian:
-
-Bash
-sudo apt update
-sudo apt install inotify-tools libnotify-bin
-For Fedora:
-
-Bash
-sudo dnf install inotify-tools libnotify
-For Arch Linux:
-
-Bash
-sudo pacman -S inotify-tools libnotify
-🚀 How to Setup
-1. Prepare the Script
-Move your script to a folder and make it "runnable":
-
-Bash
-mkdir -p ~/My_bash_scripts
-# Move your file into that folder, then run:
-chmod +x ~/My_bash_scripts/instant-sorter.sh
-2. Make it Start Automatically
-Create a "service" so it runs in the background:
-
-Run: mkdir -p ~/.config/systemd/user
-
-Run: nano ~/.config/systemd/user/instant-sorter.service
-
-Paste this short block inside:
-
-Ini, TOML
-[Unit]
+📂 Instant SorterReal-time Smart Organizer for LinuxA standalone Bash utility that monitors your Downloads directory and organizes files instantly using the Linux kernel's inotify API.🛠️ System RequirementsTo use this script, your system must have:inotify-tools: To watch file events.libnotify: To send desktop alerts.Bash 4.0+: To run the logic.🚀 Quick StartPermissions: Make the script executable:chmod +x instant-sorter.shManual Run: Start it in the background:./instant-sorter.sh &Check Logs: Monitor actions in real-time:tail -f ~/.instant-sorter.log🧠 Smart Logic RulesThe script follows these strict rules to ensure your data is safe:RuleActionSafetyIgnores hidden files and active .part or !qB downloads.GroupingDetects "siblings" (e.g., Part1, Part2) and moves them to a shared folder.ConflictNever overwrites. If a file exists, it appends _1, _2 to the name.UniversalUses $HOME and $(id -u) to work on any user account.⚙️ Universal Autostart (Systemd)To run this script on boot, create a service file at:~/.config/systemd/user/instant-sorter.servicePaste this template:Ini, TOML[Unit]
 Description=Instant Sorter
 After=default.target
 
 [Service]
 Type=simple
-ExecStart=/bin/bash %h/My_bash_scripts/instant-sorter.sh
+# Replace /FULL/PATH/TO/ with the folder where you saved the script
+ExecStart=/bin/bash /FULL/PATH/TO/instant-sorter.sh
 Restart=always
 
 [Install]
 WantedBy=default.target
-3. Start the Sorter
-Run these 3 commands one by one:
-
-Bash
-systemctl --user daemon-reload
-systemctl --user enable instant-sorter.service
-systemctl --user start instant-sorter.service
-📂 Where do files go?
-The script creates these folders in your Downloads:
-
-Images: Photos and icons
-
-Videos: Movies and clips
-
-Audio: Music and sounds
-
-Archives: Zip and Rar files
-
-Software: AppImages, Debs, and Exe
-
-Documents: PDF, EPUB, and Text
-
-Torrents: .torrent files
-
-📝 Check the Logs
-If you want to see what the script is doing:
-
-Bash
-tail -f ~/.instant-sorter.log
+Then enable it:Bashsystemctl --user daemon-reload
+systemctl --user enable --now instant-sorter.service
+📂 Category MapFiles are sorted into these default categories:Images: Photos, icons, and vectors.Videos: Movies and screen recordings.Audio: Music and voice clips.Archives: Zips, Tarballs, and ISOs.Software: AppImages, Debs, and Exe files.Documents: PDFs, Epubs, and Office files.Torrents: Native .torrent file support.
